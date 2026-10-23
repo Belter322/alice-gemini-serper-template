@@ -150,9 +150,20 @@ async function askGemini(text, history, searchContext, timeoutMs) {
 
   if (!response.ok) {
     const status = Number(response.status);
-    console.error("Gemini request failed with HTTP", status);
+    // Log only Google's short error code/message; never log request headers or API keys.
+    const apiError = data?.error || {};
+    const apiStatus = String(apiError.status || "").slice(0, 80);
+    const apiMessage = String(apiError.message || "").replace(/AIza[0-9A-Za-z_-]{20,}/g, "[REDACTED]").slice(0, 500);
+    console.error("Gemini request failed:", JSON.stringify({
+      httpStatus: status,
+      apiStatus,
+      apiMessage,
+      model,
+      endpointVersion: "v1beta",
+    }));
     if (status === 401 || status === 403) throw new Error("GEMINI_KEY_REJECTED");
     if (status === 429) throw new Error("GEMINI_QUOTA");
+    if (status === 404) throw new Error("GEMINI_MODEL_OR_ENDPOINT_NOT_FOUND");
     throw new Error("GEMINI_REQUEST_FAILED");
   }
 
