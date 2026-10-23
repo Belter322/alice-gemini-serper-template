@@ -128,6 +128,7 @@ async function askGemini(text, history, searchContext, timeoutMs) {
     : text;
   contents.push({ role: "user", parts: [{ text: prompt }] });
 
+  const geminiStartedAt = Date.now();
   const { response, data } = await fetchJson(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
@@ -174,9 +175,23 @@ async function askGemini(text, history, searchContext, timeoutMs) {
     .trim();
 
   if (!answer) {
+    console.warn("Gemini returned no text:", JSON.stringify({
+      model,
+      httpStatus: Number(response.status),
+      blockReason: String(data?.promptFeedback?.blockReason || "").slice(0, 80),
+      finishReason: String(candidate?.finishReason || "").slice(0, 80),
+      durationMs: Date.now() - geminiStartedAt,
+    }));
     if (data?.promptFeedback?.blockReason) throw new Error("GEMINI_BLOCKED");
     throw new Error("GEMINI_EMPTY_RESPONSE");
   }
+  console.info("Gemini response received:", JSON.stringify({
+    model,
+    httpStatus: Number(response.status),
+    durationMs: Date.now() - geminiStartedAt,
+    answerLength: answer.length,
+    finishReason: String(candidate?.finishReason || "").slice(0, 80),
+  }));
   if (candidate?.finishReason === "MAX_TOKENS") {
     console.warn("Gemini reached the output token limit.");
   }
@@ -228,6 +243,15 @@ export default async function handler(req, res) {
       oldHistory
     ));
   }
+
+  console.info("Alice webhook request received:", JSON.stringify({
+    method: req.method,
+    hasText: Boolean(text),
+    textLength: text.length,
+    searchIntent: isSearchIntent(text),
+    hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+    hasSerperKey: Boolean(process.env.SERPER_API_KEY),
+  }));
 
   try {
     let searchContext = "";
